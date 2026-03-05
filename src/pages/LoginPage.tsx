@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { toast } from '@/hooks/use-toast';
 import { Zap, Shield, Trophy } from 'lucide-react';
+import { isAdmin } from '@/data/admins';
 
 const LoginPage = () => {
   const [name, setName] = useState('');
@@ -24,30 +25,63 @@ const LoginPage = () => {
     }
     setLoading(true);
     try {
-      // Check if student exists
-      const { data: existing } = await supabase
+      // Validate credentials against database
+      const { data: student, error } = await supabase
         .from('students')
         .select('*')
         .eq('reg_no', regNo.trim())
         .maybeSingle();
 
-      let student;
-      if (existing) {
-        student = existing;
-      } else {
-        const { data, error } = await supabase
-          .from('students')
-          .insert([{ name: name.trim(), reg_no: regNo.trim() }])
-          .select()
-          .single();
-        if (error) throw error;
-        student = data;
-        // Create leaderboard entry
-        await supabase.from('leaderboard').insert({ student_id: student.id });
+      if (error) throw error;
+
+      // Check if student exists
+      if (!student) {
+        toast({ 
+          title: '❌ Invalid Register Number', 
+          description: 'Register number not found. Contact admin.',
+          variant: 'destructive' 
+        });
+        setLoading(false);
+        return;
       }
+
+      // Validate name matches (case-insensitive)
+      if (student.name.toLowerCase().trim() !== name.toLowerCase().trim()) {
+        toast({ 
+          title: '❌ Name Mismatch', 
+          description: 'Name does not match register number.',
+          variant: 'destructive' 
+        });
+        setLoading(false);
+        return;
+      }
+
+      // Login successful
       setStudent(student);
-      toast({ title: 'Welcome!', description: `Logged in as ${student.name}` });
-      navigate('/aptitude');
+      
+      // Check if user is an admin
+      if (isAdmin(student.reg_no)) {
+        toast({ title: '👑 Admin Access', description: `Welcome Admin ${student.name}` });
+        navigate('/admin');
+      } else {
+        toast({ title: '✅ Login Successful', description: `Welcome ${student.name}!` });
+        
+        // Check which test is active and redirect accordingly
+        const { data: control } = await supabase
+          .from('test_control')
+          .select('*')
+          .eq('id', 1)
+          .maybeSingle();
+
+        if (control?.aptitude_active) {
+          navigate('/aptitude');
+        } else if (control?.technical_active) {
+          navigate('/technical');
+        } else {
+          // No test active, show leaderboard
+          navigate('/leaderboard');
+        }
+      }
     } catch (err: any) {
       toast({ title: 'Login failed', description: err.message, variant: 'destructive' });
     } finally {

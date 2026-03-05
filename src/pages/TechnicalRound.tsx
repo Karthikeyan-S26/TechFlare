@@ -14,7 +14,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Progress } from '@/components/ui/progress';
 import { toast } from '@/hooks/use-toast';
-import { Clock, CheckCircle, Code2 } from 'lucide-react';
+import { Clock, CheckCircle, Code2, Shield } from 'lucide-react';
+import { isAdmin } from '@/data/admins';
 
 interface Question {
   id: string;
@@ -46,18 +47,51 @@ const TechnicalRound = () => {
   );
 
   useEffect(() => {
-    if (!student) { navigate('/'); return; }
+    if (!student) { 
+      navigate('/'); 
+      return; 
+    }
+    
+    // Check if user is admin - admins cannot take tests
+    if (isAdmin(student.reg_no)) {
+      toast({ 
+        title: '⚠️ Admin Access Restricted', 
+        description: 'Admins cannot take tests. Redirecting to dashboard...',
+        variant: 'destructive'
+      });
+      navigate('/admin');
+      return;
+    }
+    
+    // Load technical questions directly
     supabase
       .from('questions')
       .select('*')
       .eq('round', 'technical')
-      .then(({ data }) => {
+      .then(({ data, error }) => {
+        if (error) {
+          console.error('Error fetching technical questions:', error);
+          setLoading(false);
+          return;
+        }
+        
         if (data && data.length > 0) {
-          setQuestions(data as Question[]);
-          if (data[0].type === 'rearrange' && data[0].options) {
-            setSortItems([...(data[0].options as string[])].sort(() => Math.random() - 0.5));
+          // Sort by section from options
+          const sorted = data.sort((a, b) => {
+            const sectionA = (a.options as any)?.section || 0;
+            const sectionB = (b.options as any)?.section || 0;
+            return sectionA - sectionB;
+          });
+          
+          setQuestions(sorted as Question[]);
+          
+          if (sorted[0].type === 'rearrange') {
+            const opts = sorted[0].options as any;
+            const shuffled = opts?.shuffled_lines || opts?.code_lines || [];
+            setSortItems([...shuffled]);
           }
         }
+        
         setLoading(false);
       });
   }, [student, navigate]);
@@ -71,7 +105,7 @@ const TechnicalRound = () => {
     if (!q) return;
 
     let finalAnswer = answer;
-    if (q.type === 'rearrange') finalAnswer = sortItems.join('\n');
+    if (q.type === 'rearrange') finalAnswer = sortItems.join('|'); // Use pipe separator for database comparison
 
     const isCorrect = finalAnswer.trim() === q.correct_answer.trim();
     const questionScore = isCorrect ? q.marks : 0;
@@ -115,8 +149,10 @@ const TechnicalRound = () => {
       const nextQ = questions[currentIdx + 1];
       setCurrentIdx(i => i + 1);
       setAnswer('');
-      if (nextQ.type === 'rearrange' && nextQ.options) {
-        setSortItems([...(nextQ.options as string[])].sort(() => Math.random() - 0.5));
+      if (nextQ.type === 'rearrange') {
+        const opts = (nextQ.options as any);
+        const shuffled = opts?.shuffled_lines || opts?.code_lines || [];
+        setSortItems([...shuffled]);
       }
       reset(getTimerDuration(nextQ.type));
     } else {
@@ -198,8 +234,11 @@ const TechnicalRound = () => {
         {/* Header */}
         <div className="flex items-center justify-between mb-6">
           <div>
-            <p className="text-sm text-muted-foreground">Technical Round</p>
-            <p className="text-xs text-muted-foreground">Q{currentIdx + 1}/{questions.length} — {q.type}</p>
+            <p className="text-sm font-semibold text-foreground">Technical Round</p>
+            <p className="text-xs text-muted-foreground">
+              Question {currentIdx + 1} of {questions.length}
+              {((q.options as any)?.section_name) && ` • ${String((q.options as any).section_name)}`}
+            </p>
           </div>
           <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-destructive/10 border border-destructive/20">
             <Clock className="w-4 h-4 text-destructive" />
@@ -216,8 +255,14 @@ const TechnicalRound = () => {
 
         <AnimatePresence mode="wait">
           <motion.div key={q.id} initial={{ opacity: 0, x: 30 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -30 }} className="card-arena p-6 mb-6">
-            <div className="inline-block px-2 py-1 rounded bg-primary/10 text-primary text-xs font-semibold mb-3 uppercase">{q.type}</div>
-            <h2 className="text-lg font-semibold text-foreground mb-4" style={{ fontFamily: 'Inter, sans-serif' }}>{q.content}</h2>
+            {((q.options as any)?.section_name) && (
+              <div className="inline-block px-3 py-1 rounded bg-primary/10 text-primary text-xs font-semibold mb-4 uppercase tracking-wide">
+                {String((q.options as any).section_name)}
+              </div>
+            )}
+            <h2 className="text-base font-normal text-foreground mb-4 whitespace-pre-wrap leading-relaxed" style={{ fontFamily: 'Inter, sans-serif' }}>
+              {q.content}
+            </h2>
 
             {q.image_url && <img src={q.image_url} alt="Question" className="w-full max-h-60 object-contain rounded-lg mb-4 bg-secondary/50" />}
 
@@ -235,34 +280,50 @@ const TechnicalRound = () => {
             )}
 
             {/* Text input types */}
-            {['syntax_error', 'pseudocode_output', 'write_output'].includes(q.type) && (
+            {['write_output'].includes(q.type) && (
               <Input
                 value={answer}
                 onChange={e => setAnswer(e.target.value)}
-                placeholder={
-                  q.type === 'syntax_error' ? 'Type the syntax error...' :
-                  q.type === 'pseudocode_output' ? 'Type the expected output...' :
-                  'Type what the code prints...'
-                }
+                placeholder="Type what the code prints..."
                 className="bg-secondary/50"
               />
             )}
 
-            {/* MCQ (if technical has MCQ) */}
-            {q.type === 'mcq' && q.options && (
+            {/* MCQ for pseudocode, syntax_error, output_prediction */}
+            {['pseudocode', 'syntax_error', 'output_prediction', 'mcq'].includes(q.type) && q.options && (
               <div className="space-y-3">
-                {(q.options as string[]).map((opt, i) => (
-                  <button
-                    key={i}
-                    onClick={() => setAnswer(opt)}
-                    className={`w-full text-left p-4 rounded-lg border transition-all ${
-                      answer === opt ? 'border-primary bg-primary/10' : 'border-border bg-secondary/30 hover:border-primary/40'
-                    }`}
-                  >
-                    <span className="font-mono text-xs text-muted-foreground mr-3">{String.fromCharCode(65 + i)}</span>
-                    {opt}
-                  </button>
-                ))}
+                {(() => {
+                  // Extract options array - handle JSONB structure from database
+                  const opts = (q.options as any);
+                  let optionsArray: string[] = [];
+                  
+                  if (Array.isArray(opts)) {
+                    // Direct array
+                    optionsArray = opts;
+                  } else if (opts && typeof opts === 'object') {
+                    // Check for 'options' property first (nested array)
+                    if (Array.isArray(opts.options)) {
+                      optionsArray = opts.options;
+                    } else {
+                      // Extract numeric keys only (0, 1, 2, 3) from JSONB
+                      const keys = Object.keys(opts).filter(k => !isNaN(Number(k))).sort();
+                      optionsArray = keys.map(k => opts[k]).filter(v => typeof v === 'string' && v.length > 0);
+                    }
+                  }
+                  
+                  return optionsArray.map((opt: string, i: number) => (
+                    <button
+                      key={i}
+                      onClick={() => setAnswer(opt)}
+                      className={`w-full text-left p-4 rounded-lg border transition-all ${
+                        answer === opt ? 'border-primary bg-primary/10' : 'border-border bg-secondary/30 hover:border-primary/40'
+                      }`}
+                    >
+                      <span className="font-mono text-xs text-muted-foreground mr-3">{String.fromCharCode(65 + i)}</span>
+                      <span className="whitespace-pre-wrap">{String(opt)}</span>
+                    </button>
+                  ));
+                })()}
               </div>
             )}
 
@@ -282,9 +343,32 @@ const TechnicalRound = () => {
           </motion.div>
         </AnimatePresence>
 
-        <Button onClick={submitAnswer} disabled={submitting} className="w-full h-12 text-base font-semibold">
-          {submitting ? 'Submitting...' : currentIdx < questions.length - 1 ? 'Submit & Next' : 'Finish Competition'}
-        </Button>
+        {/* Conditionally show submit button only after answer is provided */}
+        {(() => {
+          const hasAnswer = q.type === 'rearrange' 
+            ? (sortItems && sortItems.length > 0)
+            : (answer && answer.trim() !== '');
+          
+          if (!hasAnswer) {
+            return (
+              <div className="w-full h-12 flex items-center justify-center border-2 border-dashed border-muted-foreground/30 rounded-lg">
+                <p className="text-sm text-muted-foreground">
+                  {q.type === 'rearrange' ? 'Arrange the code lines to continue' : 'Select an answer to continue'}
+                </p>
+              </div>
+            );
+          }
+
+          return (
+            <Button 
+              onClick={submitAnswer}
+              disabled={submitting}
+              className="w-full h-12 text-base font-semibold"
+            >
+              {submitting ? 'Submitting...' : currentIdx < questions.length - 1 ? 'Submit & Next' : 'Finish Competition'}
+            </Button>
+          );
+        })()}
       </div>
     </div>
   );

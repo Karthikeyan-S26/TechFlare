@@ -18,6 +18,7 @@ interface LeaderboardEntry {
 const Leaderboard = () => {
   const [entries, setEntries] = useState<LeaderboardEntry[]>([]);
   const [loading, setLoading] = useState(true);
+  const [testControl, setTestControl] = useState<any>(null);
   const navigate = useNavigate();
 
   const fetchLeaderboard = async () => {
@@ -31,17 +32,39 @@ const Leaderboard = () => {
     setLoading(false);
   };
 
+  const fetchTestControl = async () => {
+    const { data } = await supabase
+      .from('test_control')
+      .select('*')
+      .eq('id', 1)
+      .maybeSingle();
+    if (data) {
+      setTestControl(data);
+    }
+  };
+
   useEffect(() => {
     fetchLeaderboard();
+    fetchTestControl();
 
-    const channel = supabase
+    const leaderboardChannel = supabase
       .channel('leaderboard-realtime')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'leaderboard' }, () => {
         fetchLeaderboard();
       })
       .subscribe();
 
-    return () => { supabase.removeChannel(channel); };
+    const controlChannel = supabase
+      .channel('test-control-realtime')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'test_control' }, () => {
+        fetchTestControl();
+      })
+      .subscribe();
+
+    return () => { 
+      supabase.removeChannel(leaderboardChannel); 
+      supabase.removeChannel(controlChannel);
+    };
   }, []);
 
   const getRankStyle = (rank: number) => {
@@ -68,6 +91,37 @@ const Leaderboard = () => {
             <span className="text-accent text-xs font-semibold">● LIVE</span>
           </div>
         </div>
+
+        {/* Test Navigation Buttons - Show when tests are active */}
+        {testControl && (testControl.aptitude_active || testControl.technical_active) && (
+          <motion.div
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="mb-6 p-4 rounded-lg bg-primary/10 border border-primary/30"
+          >
+            <p className="text-sm font-semibold text-foreground mb-3">🎮 Active Tests - Click to participate:</p>
+            <div className="flex gap-3">
+              {testControl.aptitude_active && (
+                <Button 
+                  onClick={() => navigate('/aptitude')}
+                  className="flex-1"
+                  variant="default"
+                >
+                  ▶️ Join Aptitude Round
+                </Button>
+              )}
+              {testControl.technical_active && (
+                <Button 
+                  onClick={() => navigate('/technical')}
+                  className="flex-1"
+                  variant="default"
+                >
+                  ▶️ Join Technical Round
+                </Button>
+              )}
+            </div>
+          </motion.div>
+        )}
 
         {loading ? (
           <div className="text-center py-20">

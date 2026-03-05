@@ -194,6 +194,27 @@ export type Database = {
           },
         ]
       }
+      test_control: {
+        Row: {
+          aptitude_active: boolean | null
+          id: number
+          technical_active: boolean | null
+          updated_at: string | null
+        }
+        Insert: {
+          aptitude_active?: boolean | null
+          id?: number
+          technical_active?: boolean | null
+          updated_at?: string | null
+        }
+        Update: {
+          aptitude_active?: boolean | null
+          id?: number
+          technical_active?: boolean | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       violations: {
         Row: {
           id: string

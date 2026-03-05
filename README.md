@@ -1,26 +1,18 @@
-# Welcome to your Lovable project
+# TechFlare - IT Tech Arena
 
-## Project info
+## Project Overview
 
-**URL**: https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID
+**TechFlare** is the official IT Tech Arena competition platform for managing and conducting technical assessments.
 
-## How can I edit this code?
+## Features
 
-There are several ways of editing your application.
+- **Aptitude Round**: 10 questions with word scrambles, number patterns, and visual puzzles
+- **Technical Round**: 8 questions across 4 sections (Rearrange Code, Pseudocode, Syntax Errors, Output Prediction)
+- **Admin Dashboard**: Real-time monitoring with leaderboard, violations, and submissions
+- **Anti-Cheat System**: Tab detection and plagiarism monitoring
+- **Live Leaderboard**: Real-time score updates
 
-**Use Lovable**
-
-Simply visit the [Lovable Project](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and start prompting.
-
-Changes made via Lovable will be committed automatically to this repo.
-
-**Use your preferred IDE**
-
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
-
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
-
-Follow these steps:
+## Project Setup
 
 ```sh
 # Step 1: Clone the repository using the project's Git URL.

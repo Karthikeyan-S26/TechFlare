@@ -8,7 +8,8 @@ import { useTabDetection } from '@/hooks/useTabDetection';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { toast } from '@/hooks/use-toast';
-import { Clock, CheckCircle, ArrowRight } from 'lucide-react';
+import { Clock, CheckCircle, ArrowRight, Shield } from 'lucide-react';
+import { isAdmin } from '@/data/admins';
 
 interface Question {
   id: string;
@@ -34,15 +35,49 @@ const AptitudeRound = () => {
 
   useEffect(() => {
     if (!student) { navigate('/'); return; }
-    supabase
-      .from('questions')
-      .select('*')
-      .eq('round', 'aptitude')
-      .then(({ data }) => {
-        if (data && data.length > 0) setQuestions(data as Question[]);
-        else setQuestions([]);
-        setLoading(false);
+    
+    // Check if user is admin - admins cannot take tests
+    if (isAdmin(student.reg_no)) {
+      toast({ 
+        title: '⚠️ Admin Access Restricted', 
+        description: 'Admins cannot take tests. Redirecting to dashboard...',
+        variant: 'destructive'
       });
+      navigate('/admin');
+      return;
+    }
+
+    // Check if aptitude round is active
+    const checkTestStatus = async () => {
+      const { data: control } = await supabase
+        .from('test_control')
+        .select('*')
+        .eq('id', 1)
+        .maybeSingle();
+
+      if (!control?.aptitude_active) {
+        toast({
+          title: '⏸️ Test Not Active',
+          description: 'Aptitude round has not been started by admin.',
+          variant: 'destructive',
+        });
+        navigate('/leaderboard');
+        return;
+      }
+
+      // Test is active, load questions
+      supabase
+        .from('questions')
+        .select('*')
+        .eq('round', 'aptitude')
+        .then(({ data }) => {
+          if (data && data.length > 0) setQuestions(data as Question[]);
+          else setQuestions([]);
+          setLoading(false);
+        });
+    };
+
+    checkTestStatus();
   }, [student, navigate]);
 
   const submitAnswer = useCallback(async () => {
@@ -199,13 +234,20 @@ const AptitudeRound = () => {
           </motion.div>
         </AnimatePresence>
 
-        <Button
-          onClick={submitAnswer}
-          disabled={submitting}
-          className="w-full h-12 text-base font-semibold"
-        >
-          {submitting ? 'Submitting...' : currentIdx < questions.length - 1 ? 'Submit & Next' : 'Finish Round'}
-        </Button>
+        {/* Conditionally show submit button only after answer is selected */}
+        {!selected ? (
+          <div className="w-full h-12 flex items-center justify-center border-2 border-dashed border-muted-foreground/30 rounded-lg">
+            <p className="text-sm text-muted-foreground">Select an answer to continue</p>
+          </div>
+        ) : (
+          <Button
+            onClick={submitAnswer}
+            disabled={submitting}
+            className="w-full h-12 text-base font-semibold"
+          >
+            {submitting ? 'Submitting...' : currentIdx < questions.length - 1 ? 'Submit & Next' : 'Finish Round'}
+          </Button>
+        )}
       </div>
     </div>
   );
