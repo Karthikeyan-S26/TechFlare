@@ -97,16 +97,21 @@ const AdminDashboard = () => {
 
   const clearLeaderboard = async () => {
     try {
+      // Reset all scores to 0 instead of deleting (no DELETE policy exists)
       const { error } = await supabase
         .from('leaderboard')
-        .delete()
-        .gte('student_id', 0); // Delete all records
+        .update({ 
+          aptitude_score: 0, 
+          technical_score: 0, 
+          total_score: 0 
+        })
+        .gte('student_id', '00000000-0000-0000-0000-000000000000'); // Update all records
 
       if (error) throw error;
 
       toast({
         title: '🗑️ Leaderboard Cleared',
-        description: 'All leaderboard entries have been removed.',
+        description: 'All scores have been reset to 0.',
       });
 
       fetchAll();
