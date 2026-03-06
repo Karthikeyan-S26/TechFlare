@@ -38,6 +38,7 @@ const TechnicalRound = () => {
   const [finished, setFinished] = useState(false);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [testActive, setTestActive] = useState(false);
 
   useTabDetection(student?.id);
 
@@ -63,38 +64,96 @@ const TechnicalRound = () => {
       return;
     }
     
-    // Load technical questions directly
-    supabase
-      .from('questions')
-      .select('*')
-      .eq('round', 'technical')
-      .then(({ data, error }) => {
-        if (error) {
-          console.error('Error fetching technical questions:', error);
-          setLoading(false);
-          return;
-        }
-        
-        if (data && data.length > 0) {
-          // Sort by section from options
-          const sorted = data.sort((a, b) => {
-            const sectionA = (a.options as any)?.section || 0;
-            const sectionB = (b.options as any)?.section || 0;
-            return sectionA - sectionB;
-          });
-          
-          setQuestions(sorted as Question[]);
-          
-          if (sorted[0].type === 'rearrange') {
-            const opts = sorted[0].options as any;
-            const shuffled = opts?.shuffled_lines || opts?.code_lines || [];
-            setSortItems([...shuffled]);
+    // Load technical questions function
+    const loadQuestions = () => {
+      supabase
+        .from('questions')
+        .select('*')
+        .eq('round', 'technical')
+        .then(({ data, error }) => {
+          if (error) {
+            console.error('Error fetching technical questions:', error);
+            setLoading(false);
+            return;
           }
-        }
-        
+          
+          if (data && data.length > 0) {
+            // Sort by section from options
+            const sorted = data.sort((a, b) => {
+              const sectionA = (a.options as any)?.section || 0;
+              const sectionB = (b.options as any)?.section || 0;
+              return sectionA - sectionB;
+            });
+            
+            setQuestions(sorted as Question[]);
+            
+            if (sorted[0].type === 'rearrange') {
+              const opts = sorted[0].options as any;
+              const shuffled = opts?.shuffled_lines || opts?.code_lines || [];
+              setSortItems([...shuffled]);
+            }
+          }
+          
+          setLoading(false);
+        });
+    };
+
+    // Check if technical round is active
+    const checkTestStatus = async () => {
+      const { data: control } = await supabase
+        .from('test_control')
+        .select('*')
+        .eq('id', 1)
+        .maybeSingle();
+
+      if (!control?.technical_active) {
+        setTestActive(false);
         setLoading(false);
-      });
-  }, [student, navigate]);
+        return;
+      }
+
+      // Test is active, load questions
+      setTestActive(true);
+      loadQuestions();
+    };
+
+    checkTestStatus();
+
+    // Subscribe to real-time test control changes
+    const channel = supabase
+      .channel('test-control-technical')
+      .on('postgres_changes', { 
+        event: 'UPDATE', 
+        schema: 'public', 
+        table: 'test_control',
+        filter: 'id=eq.1'
+      }, (payload: any) => {
+        const newControl = payload.new;
+        if (newControl.technical_active && !testActive) {
+          // Test just started!
+          setTestActive(true);
+          setLoading(true);
+          loadQuestions();
+          toast({
+            title: '▶️ Test Started!',
+            description: 'Technical round has started. Good luck!',
+          });
+        } else if (!newControl.technical_active && testActive) {
+          // Test was stopped
+          setTestActive(false);
+          toast({
+            title: '⏸️ Test Stopped',
+            description: 'Technical round has been stopped by admin.',
+            variant: 'destructive',
+          });
+        }
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [student, navigate, testActive]);
 
   const getTimerDuration = (type: string) => (type === 'coding' ? 300 : 60);
 
@@ -184,6 +243,22 @@ const TechnicalRound = () => {
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-center">
           <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4" />
           <p className="text-muted-foreground">Loading technical questions...</p>
+        </motion.div>
+      </div>
+    );
+  }
+
+  if (!testActive) {
+    return (
+      <div className="min-h-screen bg-background bg-grid flex items-center justify-center p-4">
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="card-arena p-8 text-center max-w-md">
+          <Clock className="w-16 h-16 text-muted-foreground mx-auto mb-4 animate-pulse" />
+          <h2 className="text-2xl font-bold text-foreground mb-2">⏳ Waiting for Test to Start</h2>
+          <p className="text-muted-foreground mb-4">The technical round has not been started yet. Please wait for the admin to activate it.</p>
+          <div className="flex gap-3 justify-center">
+            <Button onClick={() => navigate('/leaderboard')} variant="outline">View Leaderboard</Button>
+            <Button onClick={() => navigate('/')} variant="ghost">Back to Home</Button>
+          </div>
         </motion.div>
       </div>
     );
