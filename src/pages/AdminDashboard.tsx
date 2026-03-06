@@ -8,7 +8,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { ArrowLeft, Users, Trophy, AlertTriangle, FileWarning, ClipboardList, Shield } from 'lucide-react';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
+import { ArrowLeft, Users, Trophy, AlertTriangle, FileWarning, ClipboardList, Shield, Trash2 } from 'lucide-react';
 import { isAdmin } from '@/data/admins';
 import { toast } from '@/hooks/use-toast';
 
@@ -91,6 +92,30 @@ const AdminDashboard = () => {
       });
     } finally {
       setControlLoading(false);
+    }
+  };
+
+  const clearLeaderboard = async () => {
+    try {
+      const { error } = await supabase
+        .from('leaderboard')
+        .delete()
+        .neq('id', 0); // Delete all records
+
+      if (error) throw error;
+
+      toast({
+        title: '🗑️ Leaderboard Cleared',
+        description: 'All leaderboard entries have been removed.',
+      });
+
+      fetchAll();
+    } catch (err: any) {
+      toast({
+        title: 'Error',
+        description: err.message,
+        variant: 'destructive',
+      });
     }
   };
 
@@ -225,6 +250,34 @@ const AdminDashboard = () => {
 
           <TabsContent value="leaderboard">
             <div className="card-arena overflow-hidden">
+              <div className="flex items-center justify-between p-4 border-b">
+                <h2 className="text-lg font-semibold flex items-center gap-2">
+                  <Trophy className="w-5 h-5 text-primary" />
+                  Leaderboard
+                </h2>
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button variant="destructive" size="sm">
+                      <Trash2 className="w-4 h-4 mr-2" />
+                      Clear Leaderboard
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        This action cannot be undone. This will permanently delete all leaderboard entries.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>Cancel</AlertDialogCancel>
+                      <AlertDialogAction onClick={clearLeaderboard} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                        Clear All
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
+              </div>
               <Table>
                 <TableHeader>
                   <TableRow><TableHead>Rank</TableHead><TableHead>Name</TableHead><TableHead>Reg No</TableHead><TableHead className="text-right">Aptitude</TableHead><TableHead className="text-right">Technical</TableHead><TableHead className="text-right">Total</TableHead></TableRow>
