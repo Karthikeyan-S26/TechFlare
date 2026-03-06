@@ -100,7 +100,7 @@ const AdminDashboard = () => {
       const { error } = await supabase
         .from('leaderboard')
         .delete()
-        .neq('id', 0); // Delete all records
+        .gte('student_id', 0); // Delete all records
 
       if (error) throw error;
 
