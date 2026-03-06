@@ -5,6 +5,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Trophy, ArrowLeft, Medal } from 'lucide-react';
+import { isAdmin } from '@/data/admins';
 
 interface LeaderboardEntry {
   student_id: string;
@@ -27,7 +28,9 @@ const Leaderboard = () => {
       .select('*, students(name, reg_no)')
       .order('total_score', { ascending: false });
     if (data) {
-      setEntries(data.map((e, i) => ({ ...e, rank: i + 1 })) as LeaderboardEntry[]);
+      // Filter out admins from public leaderboard
+      const filteredData = data.filter(e => e.students && !isAdmin(e.students.reg_no));
+      setEntries(filteredData.map((e, i) => ({ ...e, rank: i + 1 })) as LeaderboardEntry[]);
     }
     setLoading(false);
   };
